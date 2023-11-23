@@ -3,6 +3,7 @@ use crate::ram::Ram;
 pub(crate) const START_ADDRESS: u16 = 0x200;
 pub struct Cpu {
     vx: [u8; 16],
+    prev_pc: u16,
     pc: u16,
     i: u16,
 }
@@ -12,6 +13,7 @@ impl Cpu {
         Cpu {
             vx: [0; 16],
             pc: START_ADDRESS,
+            prev_pc: 0,
             i: 0,
         }
     }
@@ -25,7 +27,16 @@ impl Cpu {
         let n = (instruction & 0x00F) as u8; // 4 bits
         let x = ((instruction & 0x0F00) >> 8) as u8; // 4 bits
         let y = ((instruction & 0x00F0) >> 4) as u8; // 4 bits
-        //println!("Instruction: {:#X}", instruction);
+
+        println!("Instruction: {:#X}", instruction);
+        println!("nn: {:#X}", nn);
+
+        if self.prev_pc == self.pc {
+            panic!("Infinite loop detected");
+        }
+
+        self.prev_pc = self.pc;
+
         match (instruction & 0xF000) >> 12 {
             0x1 => {
                 // JUMPS TO NNN
@@ -33,7 +44,8 @@ impl Cpu {
             },
             0x3 => {
                 // SKIPS THE NEXT INSTRUCTION IF VX EQUALS NN
-                if self.read_reg_vx(x) == nn {
+                let temp = self.read_reg_vx(x);
+                if temp == nn {
                     self.pc += 4;
                 } else {
                     self.pc += 2;
@@ -41,7 +53,8 @@ impl Cpu {
             },
             0x4 => {
                 // SKIPS THE NEXT INSTRUCTION IF VX DOES NOT EQUAL NN
-                if self.read_reg_vx(x) != nn {
+                let temp = self.read_reg_vx(x);
+                if temp != nn {
                     self.pc += 4;
                 } else {
                     self.pc += 2;
@@ -49,7 +62,9 @@ impl Cpu {
             },
             0x5 => {
               // SKIPS THE NEXT INSTRUCTION IF VX EQUALS VY
-                if self.read_reg_vx(x) == self.read_reg_vx(y) {
+                let temp_x = self.read_reg_vx(x);
+                let temp_y = self.read_reg_vx(y);
+                if temp_x == temp_y {
                     self.pc += 4;
                 } else {
                     self.pc += 2;
@@ -63,7 +78,7 @@ impl Cpu {
             0x7 => {
                 // ADDS NN TO VX
                 let temp = self.read_reg_vx(x);
-                self.write_reg_vx(x, temp.wrapping_add(temp));
+                self.write_reg_vx(x, temp.wrapping_add(nn));
                 self.pc += 2;
             }
             0x8 => {
@@ -79,7 +94,9 @@ impl Cpu {
             },
             0xD => {
                 // DRAWS SPRITE AT COORDINATE (VX, VY) W 8 PIXELS WIDTH AND N PIXELS HEIGHT
-                //self.draw_sprite(ram, x, y, n);
+                let temp_x = self.read_reg_vx(x);
+                let temp_y = self.read_reg_vx(y);
+                //self.draw_sprite(ram, temp_x, temp_y, n);
                 self.pc += 2;
             },
             0xF => {
