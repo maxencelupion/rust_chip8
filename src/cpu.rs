@@ -1,5 +1,6 @@
 use std::fmt;
 use crate::ram::Ram;
+use rand::Rng;
 pub(crate) const START_ADDRESS: u16 = 0x200;
 pub struct Cpu {
     vx: [u8; 16],
@@ -87,11 +88,32 @@ impl Cpu {
                 self.write_reg_vx(x, temp);
                 self.pc += 2;
             }
+            0x9 => {
+                // SKIPS THE NEXT INSTRUCTION IF VX DOES NOT EQUALS VY
+                let temp_x = self.read_reg_vx(x);
+                let temp_y = self.read_reg_vx(y);
+                if temp_x != temp_y {
+                    self.pc += 4;
+                } else {
+                    self.pc += 2;
+                }
+            },
             0xA => {
                 // SETS I TO NNN
                 self.i = nnn;
                 self.pc += 2;
             },
+            0xB => {
+                // JUMPS TO NNN + V0
+                let temp = self.vx.iter().position(|&r| r == 0).unwrap() as u16;
+                self.pc = nnn + temp;
+            },
+            0xC => {
+                // SETS VX TO THE RESULT OF A BITWISE & OPERATION ON A RANDOM NUMBER AND NN
+                let random_number = rand::thread_rng().gen_range(0, 255) as u8;
+                self.write_reg_vx(x, random_number & nn);
+                self.pc += 2;
+            }
             0xD => {
                 // DRAWS SPRITE AT COORDINATE (VX, VY) W 8 PIXELS WIDTH AND N PIXELS HEIGHT
                 let temp_x = self.read_reg_vx(x);
@@ -105,7 +127,9 @@ impl Cpu {
                 self.i += temp as u16;
                 self.pc += 2;
             }
-            _ => panic!("Unknown instruction {:#X}", instruction),
+            _ =>  {
+                panic!("Unknown instruction {:#X}", instruction);
+            }
         }
     }
 
