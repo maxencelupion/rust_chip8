@@ -4,6 +4,7 @@ use rand::Rng;
 
 pub(crate) const START_ADDRESS: u16 = 0x200;
 pub struct Cpu {
+    // 16 REGISTERS V0 TO VF
     vx: [u8; 16],
     pc: u16,
     i: u16,
@@ -125,52 +126,37 @@ impl Cpu {
                     },
                     0x4 => {
                         // ADDS VY TO VX. VF IS SET TO 1 IF THERE'S A CARRY, 0 WHEN THERE IS NOT
-                        let total: u16 = temp_x as u16 + temp_y as u16;
-                        self.write_reg_vx(x, total as u8);
-                        if total > 0xFF {
-                            self.write_reg_vx(0xF, 1);
-                        } else {
-                            self.write_reg_vx(0xF, 0);
-                        }
+                        let (total, overflow) = temp_x.overflowing_add(temp_y);
+                        self.write_reg_vx(x, total);
+                        self.write_reg_vx(0xF, overflow as u8);
                     },
                     0x5 => {
                         // SUBTRACTS VY OF VX. VF IS SET TO 0 IF THERE'S A BORROW,
                         // 0 WHEN THERE'S NONE
-                        let total: i8 = temp_x as i8 - temp_y as i8;
-                        self.write_reg_vx(x, total as u8);
-                        if total < 0 {
-                            self.write_reg_vx(0xF, 1);
-                        } else {
-                            self.write_reg_vx(0xF, 0);
-                        }
+                        let (total, underflow) = temp_x.overflowing_sub(temp_y);
+                        self.write_reg_vx(x, total);
+                        self.write_reg_vx(0xF, underflow as u8);
                     },
                     0x6 => {
                         // Stores the least significant bit of VX in VF and then shifts
                         // VX to the right by 1.
-                        //let least: u8 = temp_x & 0x1;
-                        //self.write_reg_vx(0xF, least);
-                        //self.write_reg_vx(x, temp_x >> 1);
-                        self.write_reg_vx(0xF, temp_y & 0x1);
-                        self.write_reg_vx(y, temp_y >> 1);
-                        self.write_reg_vx(x, temp_y >> 1);
+                        self.write_reg_vx(0xF, temp_x & 0x1);
+                        self.write_reg_vx(x, temp_x >> 1);
                     },
                     0x7 => {
-                        // Sets VX to VY minus VX. VF is set to 0 when there's a borrow,
-                        // and 1 when there is not.
-                        let total: u16 = temp_y as u16 - temp_x as u16;
-                        self.write_reg_vx(x, total as u8);
-                        if total < 0 {
-                            self.write_reg_vx(0xF, 1);
-                        } else {
-                            self.write_reg_vx(0xF, 0);
-                        }
+                        // SETS VX TO VY MINUS VX. VF IS SET TO 0 WHEN THERE'S A BORROW AND 1 WHEN
+                        // THERE'S NONE
+                        let (total, underflow) = temp_y.overflowing_sub(temp_x);
+                        self.write_reg_vx(x, total);
+                        self.write_reg_vx(0xF, underflow as u8);
                     },
                     0xE => {
-                        // Stores the most significant bit of VX in VF and then shifts
-                        // VX to the left by 1.
-                        let most = (temp_x & 0x80) >> 7;
+                        // STORES THE MOST SIGNIFICANT BIT OF VX IN VF AND THEN SHIFTS VX TO THE
+                        // LEFT BY 1
+                        let most = temp_x >> 7;
+                        let shifted = temp_x << 1;
                         self.write_reg_vx(0xF, most);
-                        self.write_reg_vx(x, temp_x << 1);
+                        self.write_reg_vx(x, shifted);
                     },
                     _ => {
                         panic!("Unknown instruction for 0x8.")
@@ -238,7 +224,6 @@ impl Cpu {
             }
             0xF => {
                 let temp_x = self.read_reg_vx(x);
-                let temp_y = self.read_reg_vx(y);
                 match nn {
                     0x07 => {
                         // SETS VX TO THE VALUE OF THE DELAY TIMER.
@@ -265,7 +250,6 @@ impl Cpu {
                     },
                     0x18 => {
                         // SETS THE SOUND TIMER TO VX.
-                        connector.change_sound_timer(temp_x);
                         self.pc += 2;
                     },
                     0x1E => {
@@ -275,7 +259,7 @@ impl Cpu {
                     },
                     0x29 => {
                         // SETS I TO THE LOCATION OF THE SPRITE FOR THE CHARACTER IN VX.
-                        self.i = self.read_reg_vx(x) as u16 * 5;
+                        self.i = temp_x as u16 * 5;
                         self.pc += 2;
                     },
                     0x33 => {
@@ -291,29 +275,26 @@ impl Cpu {
                         // STORES FROM V0 TO VX INCLUDED IN MEMORY, STARTING AT ADDRESS I.
                         // THE OFFSET FROM I IS INCREASED BY 1 FOR EACH VALUE WRITTEN, BUT I
                         // ITSELF IS UNMODIFIED.
-                        for j in 0..x + 1 {
-                            let temp = self.read_reg_vx(j);
-                            connector.write_byte_ram(self.i + j as u16, j);
+                        for j in 0..=x as usize {
+                            let value = self.read_reg_vx(j as u8);
+                            connector.write_byte_ram(self.i + j as u16, value);
                         }
-                        self.i += x as u16 + 1;
                         self.pc += 2;
                     },
                     0x65 => {
                         // FILLS FROM V0 TO VX INCLUDED WITH VALUES FROM MEMORY, STARTING AT
                         // ADDRESS I. THE OFFSET FROM I IS INCREASED BY 1 FOR EACH VALUE READ, BUT
                         // I ITSELF IS UNMODIFIED.
-                        for j in 0..x + 1 {
-                            let temp = connector.read_byte_ram(self.i + j as u16);
-                            self.write_reg_vx(j, temp);
+                        for j in 0..=x as usize {
+                            let value = connector.read_byte_ram(self.i + j as u16);
+                            self.write_reg_vx(j as u8, value);
                         }
                         self.pc += 2;
-                        //self.i += x as u16 + 1;
                     },
                     _ => {
                         panic!("Unknow instruction for 0xF.")
                     }
                 }
-                //self.pc += 2;
             }
             _ =>  {
                 panic!("Unknown instruction {:#X}", instruction);
