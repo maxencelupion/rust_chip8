@@ -1,12 +1,10 @@
 use std::fmt;
 use crate::connector::Connector;
 use rand::Rng;
-use crate::display::Display;
 
 pub(crate) const START_ADDRESS: u16 = 0x200;
 pub struct Cpu {
     vx: [u8; 16],
-    prev_pc: u16,
     pc: u16,
     i: u16,
     ret_stack: Vec<u16>,
@@ -17,7 +15,6 @@ impl Cpu {
         Cpu {
             vx: [0; 16],
             pc: START_ADDRESS,
-            prev_pc: 0,
             i: 0,
             ret_stack: Vec::<u16>::new(),
         }
@@ -36,30 +33,25 @@ impl Cpu {
         println!("Instruction: {:#X}", instruction);
         println!("nn: {:#X}", nn);
 
-        if self.prev_pc == self.pc {
-            panic!("Infinite loop detected");
-        }
-
         if self.ret_stack.len() > 24 {
             panic!("Too much subroutines. Only 24 are allowed.")
         }
-
-        self.prev_pc = self.pc;
 
         match (instruction & 0xF000) >> 12 {
             0x0 => {
                 match nn {
                     0xEE => {
                         // RETURNS FROM A SUBROUTINE
-                        self.pc = self.ret_stack[self.ret_stack.len() - 1];
-                        self.ret_stack.pop();
+                        let addr = self.ret_stack.pop().unwrap();
+                        self.pc = addr;
                     },
                     0xE0 => {
                         // CLEARS THE SCREEN
+                        connector.clear_screen();
                         self.pc += 2;
                     },
                     _ => {
-                        panic!("Unknown instruction for 0x0.")
+                        panic!("Unknown instruction for 0x0: {:#X}", nn);
                     },
                 }
             },
@@ -133,28 +125,52 @@ impl Cpu {
                     },
                     0x4 => {
                         // ADDS VY TO VX. VF IS SET TO 1 IF THERE'S A CARRY, 0 WHEN THERE IS NOT
-                        self.write_reg_vx(x, temp_x + temp_y);
-                        // ADD CODE TO CHANGE VF
+                        let total: u16 = temp_x as u16 + temp_y as u16;
+                        self.write_reg_vx(x, total as u8);
+                        if total > 0xFF {
+                            self.write_reg_vx(0xF, 1);
+                        } else {
+                            self.write_reg_vx(0xF, 0);
+                        }
                     },
                     0x5 => {
                         // SUBTRACTS VY OF VX. VF IS SET TO 0 IF THERE'S A BORROW,
                         // 0 WHEN THERE'S NONE
-                        self.write_reg_vx(x, temp_x - temp_y);
-                        // ADD CODE TO CHANGE VF
+                        let total: i8 = temp_x as i8 - temp_y as i8;
+                        self.write_reg_vx(x, total as u8);
+                        if total < 0 {
+                            self.write_reg_vx(0xF, 1);
+                        } else {
+                            self.write_reg_vx(0xF, 0);
+                        }
                     },
                     0x6 => {
-                        // STORES THE LEAST SIGNIFICANT BIT OF VX IN VF AND SHIFTS VX TO THE
-                        // RIGHT BY 1
+                        // Stores the least significant bit of VX in VF and then shifts
+                        // VX to the right by 1.
+                        //let least: u8 = temp_x & 0x1;
+                        //self.write_reg_vx(0xF, least);
+                        //self.write_reg_vx(x, temp_x >> 1);
+                        self.write_reg_vx(0xF, temp_y & 0x1);
+                        self.write_reg_vx(y, temp_y >> 1);
+                        self.write_reg_vx(x, temp_y >> 1);
                     },
                     0x7 => {
-                        // SET VX TO VY MINUS VX. VF IS SET TO 0 IF THERE'S A BORROW,
-                        // 0 WHEN THERE'S NONE
-                        self.write_reg_vx(x, temp_y - temp_x);
-                        // ADD CODE TO CHANGE VF
+                        // Sets VX to VY minus VX. VF is set to 0 when there's a borrow,
+                        // and 1 when there is not.
+                        let total: u16 = temp_y as u16 - temp_x as u16;
+                        self.write_reg_vx(x, total as u8);
+                        if total < 0 {
+                            self.write_reg_vx(0xF, 1);
+                        } else {
+                            self.write_reg_vx(0xF, 0);
+                        }
                     },
                     0xE => {
-                        // STORES THE MOST SIGNIFICANT BIT OF VX IN VF AND SHIFTS VX TO THE
-                        // LEFT BY 1
+                        // Stores the most significant bit of VX in VF and then shifts
+                        // VX to the left by 1.
+                        let most = (temp_x & 0x80) >> 7;
+                        self.write_reg_vx(0xF, most);
+                        self.write_reg_vx(x, temp_x << 1);
                     },
                     _ => {
                         panic!("Unknown instruction for 0x8.")
@@ -199,7 +215,8 @@ impl Cpu {
                 match nn {
                     0x9E => {
                         // SKIPS THE NEXT INSTRUCTION IF THE KEY STORED IN VX IS PRESSED
-                        if connector.is_key_pressed(self.read_reg_vx(x)) {
+                        let key = self.read_reg_vx(x);
+                        if connector.is_key_pressed(key) {
                             self.pc += 4;
                         } else {
                             self.pc += 2;
@@ -207,7 +224,8 @@ impl Cpu {
                     },
                     0xA1 => {
                         // SKIPS THE NEXT INSTRUCTION IF THE KEY STORED IN VX IS NOT PRESSED
-                        if !connector.is_key_pressed(self.read_reg_vx(x)) {
+                        let key = self.read_reg_vx(x);
+                        if !connector.is_key_pressed(key) {
                             self.pc += 4;
                         } else {
                             self.pc += 2;
@@ -219,47 +237,83 @@ impl Cpu {
                 }
             }
             0xF => {
+                let temp_x = self.read_reg_vx(x);
+                let temp_y = self.read_reg_vx(y);
                 match nn {
                     0x07 => {
                         // SETS VX TO THE VALUE OF THE DELAY TIMER.
+                        let temp = connector.get_delay_timer();
+                        self.write_reg_vx(x, temp);
+                        self.pc += 2;
                     },
                     0x0A => {
                         // A KEY PRESSED IS AWAITED AND STORED IN VX.
+                        let key = connector.get_key_pressed();
+                        match key {
+                            Some(val) => {
+                                self.write_reg_vx(x, val);
+                                self.pc += 2;
+                            },
+                            None => {
+                            }
+                        }
                     },
                     0x15 => {
                         // SETS THE DELAY TIMER TO VX.
+                        connector.change_delay_timer(temp_x);
+                        self.pc += 2;
                     },
                     0x18 => {
                         // SETS THE SOUND TIMER TO VX.
+                        connector.change_sound_timer(temp_x);
+                        self.pc += 2;
                     },
                     0x1E => {
                         // ADDS VX TO I
-                        let temp = self.read_reg_vx(x);
-                        self.i += temp as u16;
+                        self.i += temp_x as u16;
+                        self.pc += 2;
                     },
                     0x29 => {
                         // SETS I TO THE LOCATION OF THE SPRITE FOR THE CHARACTER IN VX.
+                        self.i = self.read_reg_vx(x) as u16 * 5;
+                        self.pc += 2;
                     },
                     0x33 => {
                         // STORES THE BINARY-CODED DECIMAL REPRESENTATION OF VX, WITH THE HUNDREDS
                         // DIGIT IN MEMORY AT LOCATION IN I, THE TENS DIGIT AT LOCATION I+1, AND THE
                         // ONES DIGIT AT LOCATION I+2.
+                        connector.write_byte_ram(self.i, temp_x / 100);
+                        connector.write_byte_ram(self.i + 1, (temp_x % 100) / 10);
+                        connector.write_byte_ram(self.i + 2, temp_x % 10);
+                        self.pc += 2;
                     },
                     0x55 => {
                         // STORES FROM V0 TO VX INCLUDED IN MEMORY, STARTING AT ADDRESS I.
                         // THE OFFSET FROM I IS INCREASED BY 1 FOR EACH VALUE WRITTEN, BUT I
                         // ITSELF IS UNMODIFIED.
+                        for j in 0..x + 1 {
+                            let temp = self.read_reg_vx(j);
+                            connector.write_byte_ram(self.i + j as u16, j);
+                        }
+                        self.i += x as u16 + 1;
+                        self.pc += 2;
                     },
                     0x65 => {
                         // FILLS FROM V0 TO VX INCLUDED WITH VALUES FROM MEMORY, STARTING AT
                         // ADDRESS I. THE OFFSET FROM I IS INCREASED BY 1 FOR EACH VALUE READ, BUT
                         // I ITSELF IS UNMODIFIED.
+                        for j in 0..x + 1 {
+                            let temp = connector.read_byte_ram(self.i + j as u16);
+                            self.write_reg_vx(j, temp);
+                        }
+                        self.pc += 2;
+                        //self.i += x as u16 + 1;
                     },
                     _ => {
                         panic!("Unknow instruction for 0xF.")
                     }
                 }
-                self.pc += 2;
+                //self.pc += 2;
             }
             _ =>  {
                 panic!("Unknown instruction {:#X}", instruction);
@@ -267,13 +321,20 @@ impl Cpu {
         }
     }
 
-    pub fn debug_draw_sprite(&self, connector: &mut Connector, x: u8, y: u8, height: u8) {
-        for j in 0..height { // N pixels height
-            let mut b = connector.read_byte_ram(self.i + j as u16);
-            connector.debug_draw_byte(b, x, y);
-            println!();
+    pub fn debug_draw_sprite(&mut self, connector: &mut Connector, x: u8, y: u8, height: u8) {
+        println!("Drawing sprite at ({}, {})", x, y);
+        let mut should_set_vf = false;
+        for sprite_y in 0..height {
+            let b = connector.read_byte_ram(self.i + sprite_y as u16);
+            if connector.debug_draw_byte(b, x, y + sprite_y) {
+                should_set_vf = true;
+            }
         }
-        println!();
+        if should_set_vf {
+            self.write_reg_vx(0xF, 1);
+        } else {
+            self.write_reg_vx(0xF, 0);
+        }
     }
 
     pub fn write_reg_vx(&mut self, x: u8, value: u8) {

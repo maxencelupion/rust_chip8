@@ -22,7 +22,16 @@ impl Chip8 {
     }
 
     pub fn run_instruction(&mut self) {
+        self.connector.tick();
         self.cpu.run_instruction(&mut self.connector);
         println!("{:?}", self.cpu);
+    }
+
+    pub fn get_dislay(&self) -> &[u8] {
+        self.connector.get_display()
+    }
+
+    pub fn change_key_pressed(&mut self, key: Option<u8>) {
+        self.connector.change_key_pressed(key);
     }
 }

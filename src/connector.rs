@@ -1,11 +1,14 @@
 use crate::ram::Ram;
 use crate::input::Input;
 use crate::display::Display;
+use std::time;
 
 pub struct Connector {
     ram: Ram,
     input: Input,
-    display: Display
+    display: Display,
+    delay_timer: u8,
+    sound_timer: u8,
 }
 
 impl Connector {
@@ -13,7 +16,9 @@ impl Connector {
         Connector {
             ram: Ram::new(),
             input: Input::new(),
-            display: Display::new()
+            display: Display::new(),
+            delay_timer: 0,
+            sound_timer: 0,
         }
     }
 
@@ -25,11 +30,49 @@ impl Connector {
         self.ram.write_byte(address, value)
     }
 
-    pub fn debug_draw_byte(&mut self, b: u8, x: u8, y: u8) {
+    pub fn debug_draw_byte(&mut self, b: u8, x: u8, y: u8) -> bool {
         self.display.debug_draw_sprite(b, x, y)
     }
 
-    pub fn is_key_pressed(&self, key: u8) -> bool {
-        self.input.is_key_pressed(key)
+    pub fn clear_screen(&mut self) {
+        self.display.clear_screen();
+    }
+
+    pub fn change_key_pressed(&mut self, key: Option<u8>) {
+        self.input.change_key_pressed(key);
+    }
+
+    pub fn is_key_pressed(&self, key_tested: u8) -> bool {
+        self.input.is_key_pressed(key_tested)
+    }
+
+    pub fn get_key_pressed(&self) -> Option<u8> {
+        self.input.get_key_pressed()
+    }
+
+    pub fn get_delay_timer(&self) -> u8 {
+        self.delay_timer
+    }
+
+    pub fn change_delay_timer(&mut self, value: u8) {
+        self.delay_timer = value;
+    }
+
+    pub fn get_sound_timer(&self) -> u8 {
+        self.sound_timer
+    }
+
+    pub fn change_sound_timer(&mut self, value: u8) {
+        self.sound_timer = value;
+    }
+
+    pub fn tick(&mut self) {
+        if self.delay_timer > 0 {
+            self.delay_timer -= 1;
+        }
+    }
+
+    pub fn get_display(&self) -> &[u8] {
+        self.display.get_display()
     }
 }
