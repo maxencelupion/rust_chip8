@@ -1,4 +1,3 @@
-use std::fmt;
 use crate::connector::Connector;
 use rand::Rng;
 
@@ -8,6 +7,7 @@ pub struct Cpu {
     vx: [u8; 16],
     pc: u16,
     i: u16,
+    // CONTAINS ADDRESS TO RETURNS FROM SUB ROUTINES
     ret_stack: Vec<u16>,
 }
 
@@ -22,17 +22,14 @@ impl Cpu {
     }
 
     pub fn run_instruction(&mut self, connector: &mut Connector) {
-        let instruction_high = connector.read_byte_ram(self.pc) as u16;
-        let instruction_low = connector.read_byte_ram(self.pc + 1) as u16;
-        let instruction: u16 =  (instruction_high << 8) | instruction_low;
-        let nnn = instruction & 0x0FFF; // 12 bits
-        let nn = (instruction & 0x0FF) as u8; // 8 bits
-        let n = (instruction & 0x00F) as u8; // 4 bits
-        let x = ((instruction & 0x0F00) >> 8) as u8; // 4 bits
-        let y = ((instruction & 0x00F0) >> 4) as u8; // 4 bits
-
-        println!("Instruction: {:#X}", instruction);
-        println!("nn: {:#X}", nn);
+        let high = connector.read_byte_ram(self.pc) as u16;
+        let low = connector.read_byte_ram(self.pc + 1) as u16;
+        let instruction: u16 =  (high << 8) | low;
+        let nnn = instruction & 0x0FFF;
+        let nn = (instruction & 0x0FF) as u8;
+        let n = (instruction & 0x00F) as u8;
+        let x = ((instruction & 0x0F00) >> 8) as u8;
+        let y = ((instruction & 0x00F0) >> 4) as u8;
 
         if self.ret_stack.len() > 24 {
             panic!("Too much subroutines. Only 24 are allowed.")
@@ -250,6 +247,7 @@ impl Cpu {
                     },
                     0x18 => {
                         // SETS THE SOUND TIMER TO VX.
+                        connector.change_sound_timer(temp_x);
                         self.pc += 2;
                     },
                     0x1E => {
@@ -303,7 +301,6 @@ impl Cpu {
     }
 
     pub fn debug_draw_sprite(&mut self, connector: &mut Connector, x: u8, y: u8, height: u8) {
-        println!("Drawing sprite at ({}, {})", x, y);
         let mut should_set_vf = false;
         for sprite_y in 0..height {
             let b = connector.read_byte_ram(self.i + sprite_y as u16);
@@ -324,17 +321,5 @@ impl Cpu {
 
     pub fn read_reg_vx(&mut self, x: u8) -> u8 {
         self.vx[x as usize]
-    }
-}
-
-impl fmt::Debug for Cpu {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "pc: {:#X}\n", self.pc);
-        write!(f, "vx: ");
-        for i in self.vx.iter() {
-            write!(f, "{:#X} ", *i);
-        }
-        write!(f, "\n");
-        write!(f, "i: {:#X}\n", self.i)
     }
 }

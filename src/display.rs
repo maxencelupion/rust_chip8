@@ -19,10 +19,12 @@ impl Display {
     pub fn debug_draw_sprite(&mut self, b: u8, x: u8, y: u8) -> bool {
         let mut collision = false;
         let mut coord_x = x as usize;
-        let coord_y = y as usize;
+        let mut coord_y = y as usize;
         let mut byte = b;
 
         for _ in 0..8 {
+            coord_x %= WIDTH_SCREEN;
+            coord_y %= HEIGHT_SCREEN;
             let position = Display::get_position_from_coords(coord_x, coord_y);
             let bit = (byte & 0b1000_0000) >> 7;
             let prev_value = self.screen[position];
@@ -35,27 +37,6 @@ impl Display {
             byte = byte << 1;
         }
         collision
-    }
-
-    pub fn write_screen(&self) {
-        for i in 0..self.screen.len() {
-            let pixel = self.screen[i];
-            if i % WIDTH_SCREEN == 0 {
-                println!();
-            }
-            match pixel {
-                0 => {
-                    print!("_")
-                },
-                1 => {
-                    print!("#")
-                },
-                _ => {
-                    panic!("Unreachable")
-                },
-            }
-        }
-        println!();
     }
 
     pub fn clear_screen(&mut self) {

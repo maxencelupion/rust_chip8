@@ -1,8 +1,7 @@
 use crate::ram::Ram;
 use crate::input::Input;
 use crate::display::Display;
-use minifb::{Key, Window};
-use std::time;
+use minifb::{Key};
 
 pub struct Connector {
     ram: Ram,
@@ -39,6 +38,10 @@ impl Connector {
         self.display.clear_screen();
     }
 
+    pub fn get_display(&self) -> &[u8] {
+        self.display.get_display()
+    }
+
     pub fn change_key_pressed(&mut self, key: Option<u8>) {
         self.input.change_key_pressed(key);
     }
@@ -49,6 +52,39 @@ impl Connector {
 
     pub fn get_key_pressed(&self) -> Option<u8> {
         self.input.get_key_pressed()
+    }
+
+    pub fn get_keycode_by_key(key: Option<Key>) -> Option<u8> {
+        match key {
+            // ORIGINAL : 1 2 3 C
+            // EMULATOR : A Z E R
+            Some(Key::A) => Some(0x1),
+            Some(Key::Z) => Some(0x2),
+            Some(Key::E) => Some(0x3),
+            Some(Key::R) => Some(0xC),
+
+            // ORIGINAL : 4 5 6 D
+            // EMULATOR : Q S D F
+            Some(Key::Q) => Some(0x4),
+            Some(Key::S) => Some(0x5),
+            Some(Key::D) => Some(0x6),
+            Some(Key::F) => Some(0xD),
+
+            // ORIGINAL : 7 8 9 E
+            // EMULATOR : W X C V
+            Some(Key::W) => Some(0x7),
+            Some(Key::X) => Some(0x8),
+            Some(Key::C) => Some(0x9),
+            Some(Key::V) => Some(0xE),
+
+            // ORIGINAL : A 0 B F
+            // EMULATOR : U I O P
+            Some(Key::U) => Some(0xA),
+            Some(Key::I) => Some(0x0),
+            Some(Key::O) => Some(0xB),
+            Some(Key::P) => Some(0xF),
+            _ => None,
+        }
     }
 
     pub fn get_delay_timer(&self) -> u8 {
@@ -70,35 +106,6 @@ impl Connector {
     pub fn tick(&mut self) {
         if self.delay_timer > 0 {
             self.delay_timer -= 1;
-        }
-    }
-
-    pub fn get_display(&self) -> &[u8] {
-        self.display.get_display()
-    }
-
-    pub fn get_keycode_by_key(key: Option<Key>) -> Option<u8> {
-        match key {
-            Some(Key::Key1) => Some(0x1),
-            Some(Key::Key2) => Some(0x2),
-            Some(Key::Key3) => Some(0x3),
-            Some(Key::Key4) => Some(0xC),
-
-            Some(Key::Q) => Some(0x4),
-            Some(Key::W) => Some(0x5),
-            Some(Key::E) => Some(0x6),
-            Some(Key::R) => Some(0xD),
-
-            Some(Key::A) => Some(0x7),
-            Some(Key::S) => Some(0x8),
-            Some(Key::D) => Some(0x9),
-            Some(Key::F) => Some(0xE),
-
-            Some(Key::Z) => Some(0xA),
-            Some(Key::X) => Some(0x0),
-            Some(Key::C) => Some(0xB),
-            Some(Key::V) => Some(0xF),
-            _ => None,
         }
     }
 }

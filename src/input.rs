@@ -1,5 +1,3 @@
-use minifb::{Key, Window};
-
 pub struct Input {
     key_pressed: Option<u8>,
 }
@@ -12,9 +10,10 @@ impl Input {
     }
 
     pub fn is_key_pressed(&self, key_tested: u8) -> bool {
-        match self.key_pressed {
-            Some(key) => key == key_tested,
-            _ => false
+        if let Some(key) = self.key_pressed {
+            key == key_tested
+        } else {
+            false
         }
     }
 
